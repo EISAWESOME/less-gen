@@ -1,0 +1,44 @@
+{
+    "name": "genLess",
+    "displayName": "LESS generator",
+    "description": "Generate LESS selectors from HTML",
+    "version": "0.0.1",
+    "publisher": "Clem S.",
+    "engines": {
+        "vscode": "^1.32.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:extension.genLess"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "commands": [
+            {
+                "command": "extension.genLess",
+                "title": "Generate LESS from HTML"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "lint": "eslint . --ext .ts,.tsx",
+        "watch": "tsc -watch -p ./"
+    },
+    "devDependencies": {
+        "@types/node": "^12.12.0",
+        "@types/vscode": "^1.32.0",
+        "@typescript-eslint/eslint-plugin": "^4.16.0",
+        "@typescript-eslint/parser": "^4.16.0",
+        "eslint": "^7.21.0",
+        "typescript": "^4.2.2"
+    },
+    "dependencies": {
+        "hash-sum": "^2.0.0",
+        "less": "^4.1.1",
+        "node-html-parser": "^3.1.5"
+    }
+}

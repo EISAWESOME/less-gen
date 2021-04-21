@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"target": "es2019",
+        "lib": [
+            "es5", "es6", "dom", "dom.iterable"
+        ],
+		"outDir": "out",
+		"sourceMap": true,
+		"strict": true,
+		"rootDir": "src"
+	},
+	"exclude": ["node_modules", ".vscode-test"]
+}
