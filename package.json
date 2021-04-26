@@ -2,8 +2,8 @@
     "name": "genLess",
     "displayName": "LESS generator",
     "description": "Generate LESS selectors from HTML",
-    "version": "0.0.1",
-    "publisher": "Clem S.",
+    "version": "0.0.2",
+    "publisher": "ClementS",
     "engines": {
         "vscode": "^1.32.0"
     },

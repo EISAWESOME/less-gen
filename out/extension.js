@@ -3,56 +3,81 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = void 0;
 const vscode = require("vscode");
 const HTMLparser = require("node-html-parser");
-const sum = require('hash-sum');
-const fs = require('fs');
+const fs = require("fs");
 const path = require("path");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sum = require('hash-sum');
 function activate(context) {
+    const formatDocument = async (docUri) => {
+        var _a;
+        await vscode.window.showTextDocument(docUri);
+        const textEdits = (await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', docUri));
+        const edit = new vscode.WorkspaceEdit();
+        for (const textEdit of textEdits) {
+            edit.replace(docUri, textEdit.range, textEdit.newText);
+        }
+        await vscode.workspace.applyEdit(edit);
+        await ((_a = vscode.window.activeTextEditor) === null || _a === void 0 ? void 0 : _a.document.save());
+    };
     const disposable = vscode.commands.registerCommand('extension.genLess', function () {
         // Get the active text editor
         const editor = vscode.window.activeTextEditor;
+        let fileStylePath = "";
         if (editor) {
             const document = editor.document;
             // Recup le contenu de l'editeur
             const text = document.getText();
+            // Recup le chemin vers la feuille de style
             // Check si c'est du HTML
             const isValid = HTMLparser.valid(text);
             console.log(isValid);
             if (isValid) {
-                const root = HTMLparser.parse(text);
+                const root = HTMLparser.parse(text, { comment: true });
+                const lessGenComment = root.childNodes.find(n => n.rawText.match(/lessgen@/));
+                if (lessGenComment) {
+                    const match = lessGenComment.rawText.match(/lessgen@(.*)/);
+                    if (match) {
+                        // 0 : source
+                        // 1 : matching group
+                        fileStylePath = match[1];
+                    }
+                }
                 /* #region  Processing the DOM */
                 const processElement = (el, level, output) => {
                     level++;
-                    let hash = sum(el);
+                    const hash = sum(el);
                     if (el.childNodes && el.childNodes.length > 0) {
                         el.childNodes.forEach((child) => {
                             if (child instanceof HTMLparser.TextNode) {
                                 // Si c'est un textNode, on fait rien
                             }
                             else {
-                                let selectorString = "";
-                                if (child.id) {
-                                    selectorString += "#" + child.id;
+                                if (child instanceof HTMLparser.HTMLElement) {
+                                    let selectorString = "";
+                                    if (child.id) {
+                                        selectorString += "#" + child.id;
+                                    }
+                                    if (child.classList && child.classList.length > 0) {
+                                        selectorString += "." + child.classList.value.join(".");
+                                    }
+                                    const selectorObj = {
+                                        selector: selectorString,
+                                        elementHash: sum(child),
+                                        parentHash: hash,
+                                        level
+                                    };
+                                    // On check si ce level a deja ce selecteur
+                                    const exist = output.some(e => e.selector === selectorString && e.level === level);
+                                    if (!exist) {
+                                        output.push(selectorObj);
+                                    }
+                                    processElement(child, level, output);
                                 }
-                                if (child.classList && child.classList.length > 0) {
-                                    selectorString += "." + child.classList.value.join(".");
-                                }
-                                const selectorObj = {
-                                    selector: selectorString,
-                                    elementHash: sum(child),
-                                    parentHash: hash,
-                                    level
-                                };
-                                // On check si ce level a deja ce selecteur
-                                let exist = output.some(e => e.selector === selectorString && e.level === level);
-                                if (!exist) {
-                                    output.push(selectorObj);
-                                }
-                                processElement(child, level, output);
                             }
                         });
                     }
                 };
-                let selectorsArray = [];
+                const selectorsArray = [];
                 // Peuple selectorsArray
                 // On process root, qui a son tour va process tout ces enfants recursivement
                 processElement(root, 0, selectorsArray);
@@ -60,7 +85,7 @@ function activate(context) {
                 /* #region  Building the less string */
                 // A partir du selectorsArray, crée un fichier less
                 let lessString = "";
-                let sortedSelectors = selectorsArray.sort((a, b) => {
+                const sortedSelectors = selectorsArray.sort((a, b) => {
                     return a.level - b.level;
                 });
                 console.log(sortedSelectors);
@@ -71,7 +96,7 @@ function activate(context) {
                         output += topElement.selector;
                         output += "{";
                     }
-                    let childrens = source.filter(child => child.parentHash === topElement.elementHash);
+                    const childrens = source.filter(child => child.parentHash === topElement.elementHash);
                     if (childrens && childrens.length > 0) {
                         childrens.forEach((c) => {
                             output += buildLessString(c, source);
@@ -84,17 +109,44 @@ function activate(context) {
                     return output;
                 };
                 // Vu que le tableau est trié par level, le premier element est le plus haut
-                let highestLevelElement = sortedSelectors[0];
+                const highestLevelElement = sortedSelectors[0];
                 lessString = buildLessString(highestLevelElement, sortedSelectors);
                 console.log(lessString);
                 /* #endregion */
                 /* #region  From less string, create a .less file */
-                let currentlyOpenTabfilePath = path.dirname(document.fileName);
-                fs.writeFile(currentlyOpenTabfilePath + "/truc.less", lessString, function (err) {
+                let baseSavePath = "";
+                const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
+                if (workspace) {
+                    baseSavePath += (workspace === null || workspace === void 0 ? void 0 : workspace.uri.fsPath) + path.sep;
+                }
+                const currentlyOpenTabfilePath = path.dirname(document.fileName);
+                const currentlyOpenTabfileName = path.basename(document.fileName, ".html");
+                if (fileStylePath) {
+                    baseSavePath += fileStylePath;
+                }
+                else {
+                    baseSavePath += currentlyOpenTabfilePath + path.sep + `${currentlyOpenTabfileName}.less`;
+                }
+                baseSavePath = baseSavePath.trim();
+                let savePath = baseSavePath;
+                // On n'ecrase JAMAIS un fichier existant
+                while (fs.existsSync(savePath)) {
+                    let i = 1;
+                    const pathObj = path.parse(baseSavePath);
+                    pathObj.name += `(${i})`;
+                    savePath = pathObj.dir + path.sep + pathObj.name + pathObj.ext;
+                    i++;
+                }
+                fs.writeFile(savePath, lessString, (err) => {
                     if (err) {
                         return console.log(err);
                     }
                     console.log("The file was saved!");
+                    formatDocument(vscode.Uri.file(savePath)).then(() => {
+                        console.log("File beautified !");
+                    }, (err) => {
+                        console.error("Failed to beautify file : ", err);
+                    });
                 });
                 /* #endregion */
             }
