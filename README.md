@@ -1,6 +1,6 @@
 # Less Gen
 
-Generate .less skeleton file from HTML markup
+A Visual Studio Code Extension that allows you to generate a .less skeleton file from HTML markup.
 
 Add 
 
